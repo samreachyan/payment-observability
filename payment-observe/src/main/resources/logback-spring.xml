@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <property name="LOKI_URL" value="http://localhost:3100/loki/api/v1/push" />
+    <property name="APP_NAME" value="payment-service" />
+    <property name="ENV" value="dev" />
+    <property name="DEPLOYMENT" value="${DEPLOYMENT:docker-compose}" />
+
+    <!-- Use logstash encoder for JSON formatting -->
+    <include resource="net/logstash/logback/logback-base.xml"/>
+
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>${LOKI_URL}</url>
+        </http>
+        <format>
+            <label>
+                app="${APP_NAME}", env="${ENV}", deployment="${DEPLOYMENT}", level="%level"
+            </label>
+            <messagePattern>
+                {
+                "timestamp": "%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}",
+                "level": "%level",
+                "thread": "%thread",
+                "logger": "%logger",
+                "traceId": "%X{traceId}",
+                "spanId": "%X{spanId}",
+                "message": "%message",
+                "exception": "%exception{full}"
+                }
+            </messagePattern>
+        </format>
+    </appender>
+
+    <!-- Console appender (optional, for local dev) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
+    </appender>
+
+    <!-- Set logging level and appender by package -->
+    <logger name="com.sakcode.paymentobserve.controller" level="DEBUG" additivity="false">
+        <appender-ref ref="LOKI"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="com.sakcode.paymentobserve.service" level="INFO" additivity="false">
+        <appender-ref ref="LOKI"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="com.sakcode.paymentobserve.repository" level="WARN" additivity="false">
+        <appender-ref ref="LOKI"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="LOKI"/>
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>
