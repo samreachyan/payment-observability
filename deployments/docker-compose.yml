@@ -1,33 +1,78 @@
 services:
-  postgres:
+  payment-service:
+    build:
+      context: ../payment-observe
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/paymentdb
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=pass
+      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
+      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - DEPLOYMENT=docker-compose
+    depends_on:
+      - db
+      - zipkin
+    networks:
+      - payment-network
+    volumes:
+      - ./payment_logs:/app/logs
+
+#  api-gateway:
+#    build:
+#      context: ./api-gateway
+#      dockerfile: Dockerfile
+#    ports:
+#      - "8081:8081"
+#    environment:
+#      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
+#      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
+#      - PAYMENT_SERVICE_URL=http://payment-service:8080
+#    depends_on:
+#      - payment-service
+#      - zipkin
+#    networks:
+#      - payment-network
+
+  db:
     image: postgres:16
     environment:
-      POSTGRES_DB: paymentdb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
+      - POSTGRES_DB=paymentdb
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
     ports:
       - "5432:5432"
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
     networks:
-      - observability
+      - payment-network
 
   prometheus:
-    image: prom/prometheus:v3.3.0
-    volumes:
-      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
+    image: prom/prometheus:v2.45.0
     ports:
       - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
     networks:
-      - observability
+      - payment-network
 
   grafana:
     image: grafana/grafana:12.0.1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin1
     volumes:
       - ./grafana/dashboards:/var/lib/grafana/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
-    ports:
-      - "3000:3000"
+    depends_on:
+      - prometheus
     networks:
-      - observability
+      - payment-network
 
   loki:
     image: grafana/loki:3.5
@@ -37,7 +82,7 @@ services:
     ports:
       - "3100:3100"
     networks:
-      - observability
+      - payment-network
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -49,7 +94,7 @@ services:
     depends_on:
       - loki
     networks:
-      - observability
+      - payment-network
 
   tempo:
     image: grafana/tempo:2.7.2
@@ -61,30 +106,68 @@ services:
       - "3200:3200"    # HTTP
       - "4317:4317"    # OTLP gRPC
       - "4318:4318"    # OTLP HTTP
-
     networks:
-      - observability
+      - payment-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - ./es_data:/usr/share/elasticsearch/data
+    networks:
+      - payment-network
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+    networks:
+      - payment-network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - payment-network
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.8.0
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml
+      - ./payment_logs:/app/logs:ro
+    depends_on:
+      - elasticsearch
+      - logstash
+    networks:
+      - payment-network
 
   zipkin:
     image: openzipkin/zipkin:3
     ports:
       - "9411:9411"
+    environment:
+      - STORAGE_TYPE=mem
     networks:
-      - observability
+      - payment-network
 
-#  payment-service:
-#    build: ../payment-observe
-#    depends_on:
-#      - postgres
-#      - zipkin
-#      - tempo
-#      - loki
-#    environment:
-#      SPRING_PROFILES_ACTIVE: default
-#    ports:
-#      - "8080:8080"
-
+volumes:
+  db_data:
+  grafana:
+  es_data:
+  payment_logs:
 
 networks:
-  observability:
+  payment-network:
     driver: bridge

@@ -27,7 +27,7 @@ public class PaymentController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Payment> getById(@PathVariable Long id) {
-        logger.debug("Fetching payment by id: {}", id);
+        logger.info("Fetching payment by id: {}", id);
         Optional<Payment> payment = paymentService.getPayment(id);
         return payment.map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

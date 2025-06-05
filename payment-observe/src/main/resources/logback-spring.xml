@@ -4,7 +4,7 @@
     <property name="LOKI_URL" value="http://localhost:3100/loki/api/v1/push" />
     <property name="APP_NAME" value="payment-service" />
     <property name="ENV" value="dev" />
-    <property name="DEPLOYMENT" value="${DEPLOYMENT:docker-compose}" />
+    <property name="DEPLOYMENT" value="docker-compose" />
 
     <!-- Use logstash encoder for JSON formatting -->
     <include resource="net/logstash/logback/logback-base.xml"/>

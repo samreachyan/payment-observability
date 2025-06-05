@@ -3,47 +3,42 @@ server:
 
 spring:
   application:
-    name: payment-observe
+    name: payment-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/paymentdb
-    username: user
-    password: pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/paymentdb}
+    username: ${SPRING_DATASOURCE_USERNAME:user}
+    password: ${SPRING_DATASOURCE_PASSWORD:pass}
     driver-class-name: org.postgresql.Driver
 
+    hikari:
+      maximum-pool-size: 10
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
   sleuth:
-    otel:
-      exporter:
-        otlp:
-          endpoint: http://tempo:4318
-      tracing:
-        enabled: true
+    sampler:
+      probability: ${SPRING_SLEUTH_SAMPLER_PROBABILITY:1.0}
+  zipkin:
+    base-url: ${SPRING_ZIPKIN_BASEURL:http://localhost:9411}
+
+logging:
+  file:
+    name: /app/logs/core-service.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%traceId] %-5level %logger{36} - %msg%n"
 
 management:
   endpoints:
     web:
       exposure:
-        include: "*"
-  tracing:
-    sampling:
-      probability: 1.0
-  zipkin:
-    base-url: http://zipkin:9411
-    enabled: true
+        include: prometheus, health, metrics
+
   metrics:
     export:
       prometheus:
         enabled: true
 
-logging:
-  level:
-    com.sakcode.paymentobserve.controller: DEBUG
-    com.sakcode.paymentobserve.service: INFO
-    com.sakcode.paymentobserve.repository: WARN
+  tracing:
+    sampling:
+      probability: 1.0

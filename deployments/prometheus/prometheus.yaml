@@ -5,7 +5,12 @@ scrape_configs:
   - job_name: 'payment-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['paymentobserve:8080']
+      - targets: ['payment-service:8080']
+
+  - job_name: 'api-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['localhost:8081']
 
   - job_name: 'loki'
     static_configs:
