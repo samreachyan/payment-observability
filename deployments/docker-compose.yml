@@ -1,25 +1,26 @@
 services:
-  payment-service:
-    build:
-      context: ../payment-observe
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/paymentdb
-      - SPRING_DATASOURCE_USERNAME=user
-      - SPRING_DATASOURCE_PASSWORD=pass
-      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
-      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
-      - LOKI_URL=http://loki:3100/loki/api/v1/push
-      - DEPLOYMENT=docker-compose
-    depends_on:
-      - db
-      - zipkin
-    networks:
-      - payment-network
-    volumes:
-      - ./payment_logs:/app/logs
+#  payment-service:
+#    build:
+#      context: ../payment-observe
+#      dockerfile: Dockerfile
+#    ports:
+#      - "8080:8080"
+#    environment:
+#      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/paymentdb
+#      - SPRING_DATASOURCE_USERNAME=user
+#      - SPRING_DATASOURCE_PASSWORD=pass
+#      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
+#      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
+#      - LOKI_URL=http://loki:3100/loki/api/v1/push
+#      - DEPLOYMENT=docker-compose
+#      - LOGGING_PATH=/Users/samreachyan/app_log/core-service.log
+#    depends_on:
+#      - db
+#      - zipkin
+#    networks:
+#      - payment-network
+#    volumes:
+#      - ./payment_logs:/Users/samreachyan/app_log
 
 #  api-gateway:
 #    build:
@@ -126,6 +127,10 @@ services:
     image: docker.elastic.co/logstash/logstash:8.8.0
     volumes:
       - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./logstash/config.yml:/usr/share/logstash/config/logstash.yml
+      - ./Users/samreachyan/app_log/core-service.log:/usr/share/logstash/data/core-service.log
+    ports:
+      - "5044:5044"
     depends_on:
       - elasticsearch
     networks:

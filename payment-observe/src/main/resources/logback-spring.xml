@@ -9,6 +9,22 @@
     <!-- Use logstash encoder for JSON formatting -->
     <include resource="net/logstash/logback/logback-base.xml"/>
 
+    <!-- File appender for Filebeat -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>/Users/samreachyan/app_logs/core-service.log</file>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logLevel>level</logLevel>
+                <logger>logger_name</logger>
+                <thread>thread_name</thread>
+            </fieldNames>
+            <customFields>{"app":"${APP_NAME}","env":"${ENV}","deployment":"${DEPLOYMENT}","traceId":"%X{traceId}","spanId":"%X{spanId}"}</customFields>
+        </encoder>
+    </appender>
+
+    <!-- Loki config -->
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
             <url>${LOKI_URL}</url>
@@ -38,23 +54,31 @@
     </appender>
 
     <!-- Set logging level and appender by package -->
-    <logger name="com.sakcode.paymentobserve.controller" level="DEBUG" additivity="false">
+    <logger name="com.sakcode.paymentobserve.controller" level="INFO" additivity="false">
         <appender-ref ref="LOKI"/>
+<!--        <appender-ref ref="LOGSTASH" />-->
+        <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <logger name="com.sakcode.paymentobserve.service" level="INFO" additivity="false">
         <appender-ref ref="LOKI"/>
+<!--        <appender-ref ref="LOGSTASH" />-->
+        <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <logger name="com.sakcode.paymentobserve.repository" level="WARN" additivity="false">
         <appender-ref ref="LOKI"/>
+<!--        <appender-ref ref="LOGSTASH" />-->
+        <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <root level="INFO">
         <appender-ref ref="LOKI"/>
+<!--        <appender-ref ref="LOGSTASH" />-->
+        <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </root>
 

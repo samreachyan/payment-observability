@@ -2,8 +2,13 @@ filebeat.inputs:
   - type: log
     enabled: true
     paths:
-      - /app/logs/core-service.log
+      - /Users/samreachyan/app_logs/core-service.log
+    json:
+      keys_under_root: true
+      overwrite_keys: true
 output.elasticsearch:
   hosts: ["http://elasticsearch:9200"]
+output.logstash:
+  hosts: ["logstash:5044"]
 setup.kibana:
   host: "http://kibana:5601"

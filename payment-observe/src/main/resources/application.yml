@@ -1,6 +1,9 @@
 server:
   port: 8080
 
+elasticsearch:
+  url: ${ELASTIC_URL:http://localhost:9200}
+
 spring:
   application:
     name: payment-service
@@ -12,6 +15,11 @@ spring:
 
     hikari:
       maximum-pool-size: 10
+
+  data:
+    elasticsearch:
+      cluster-nodes: ${ELASTIC_URL:http://localhost:9200}
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -24,7 +32,7 @@ spring:
 
 logging:
   file:
-    name: /app/logs/core-service.log
+    name: ${LOGGING_PATH:/Users/samreachyan/app_log/score-service.log}
   pattern:
     file: "%d{yyyy-MM-dd HH:mm:ss} [%traceId] %-5level %logger{36} - %msg%n"
 
