@@ -70,14 +70,12 @@
 
     <logger name="com.sakcode.paymentobserve.repository" level="WARN" additivity="false">
         <appender-ref ref="LOKI"/>
-<!--        <appender-ref ref="LOGSTASH" />-->
         <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <root level="INFO">
         <appender-ref ref="LOKI"/>
-<!--        <appender-ref ref="LOGSTASH" />-->
         <appender-ref ref="FILE"/>
         <appender-ref ref="CONSOLE"/>
     </root>

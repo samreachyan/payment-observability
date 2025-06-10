@@ -1,3 +1,5 @@
 db_data/
 es_data/
 payment_logs/
+alloy-data/
+grafana-data/

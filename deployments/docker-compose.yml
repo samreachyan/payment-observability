@@ -41,7 +41,7 @@ services:
   db:
     image: postgres:16
     environment:
-      - POSTGRES_DB=paymentdb
+      - POSTGRES_DB=grafana
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=pass
     ports:
@@ -51,27 +51,33 @@ services:
     networks:
       - payment-network
 
-  prometheus:
-    image: prom/prometheus:v2.45.0
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.4.24
+    container_name: chroma
+    depends_on:
+      - alloy
     ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
+      - 8000:8000
+    environment:
+      - CHROMA_OTEL_COLLECTION_ENDPOINT=http://grafana-agent:4317
+      - CHROMA_OTEL_SERVICE_NAME=chroma
+      - CHROMA_OTEL_GRANULARITY=all
+      - ANONYMIZED_TELEMETRY=False
     networks:
       - payment-network
 
-  grafana:
-    image: grafana/grafana:12.0.1
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    restart: always
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--enable-feature=otlp-write-receiver"
+      - "--enable-feature=exemplar-storage"
+      - "--web.enable-remote-write-receiver"
     ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin1
+      - "9090:9090"
     volumes:
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
-    depends_on:
-      - prometheus
+      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml
     networks:
       - payment-network
 
@@ -85,92 +91,105 @@ services:
     networks:
       - payment-network
 
-  promtail:
-    image: grafana/promtail:2.9.0
-    volumes:
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./loki/promtail-config.yaml:/etc/promtail/config.yaml
-    command: -config.file=/etc/promtail/config.yaml
-    depends_on:
-      - loki
-    networks:
-      - payment-network
-
   tempo:
     image: grafana/tempo:2.7.2
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml
-      - ./tempo/overrides.yaml:/etc/tempo/overrides.yaml
     ports:
-      - "3200:3200"    # HTTP
-      - "4317:4317"    # OTLP gRPC
-      - "4318:4318"    # OTLP HTTP
+      - "3110:3110"     # Tempo
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+#      - "9411:9411"     # Zipkin
     networks:
       - payment-network
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+  grafana:
+    image: grafana/grafana:12.0.1
+    ports:
+      - "3000:3000"
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin1
+#      - GF_DATABASE_USER=user
+#      - GF_DATABASE_PASSWORD=pass
     volumes:
-      - ./es_data:/usr/share/elasticsearch/data
-    networks:
-      - payment-network
-
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.8.0
-    volumes:
-      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
-      - ./logstash/config.yml:/usr/share/logstash/config/logstash.yml
-      - ./Users/samreachyan/app_log/core-service.log:/usr/share/logstash/data/core-service.log
-    ports:
-      - "5044:5044"
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+#      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+#      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana-data:/var/lib/grafana
     depends_on:
-      - elasticsearch
+      - loki
+      - tempo
+      - prometheus
+    restart: unless-stopped
     networks:
       - payment-network
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.8.0
-    ports:
-      - "5601:5601"
+  alloy:
+    image: docker.io/grafana/alloy:v1.0.0
+    container_name: alloy
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/data-alloy"
+      - "--disable-reporting"
+      - "/etc/alloy/config.alloy"
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+    hostname: ${HOST_NAME:-localhost}
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    depends_on:
-      - elasticsearch
-    networks:
-      - payment-network
-
-  filebeat:
-    image: docker.elastic.co/beats/filebeat:8.8.0
+      - ENVIRONMENT=dev
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - PROMETHEUS_URL=http://prometheus:9090/api/v1/write
+      - TEMPO_URL=http://tempo:4317
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "12345:12345"
+      - "4317:4317"
+      - "4318:4318"
     volumes:
-      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml
-      - ./payment_logs:/app/logs:ro
-    depends_on:
-      - elasticsearch
-      - logstash
+      - ./alloy/config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./alloy-data:/data-alloy
+    restart: unless-stopped
     networks:
       - payment-network
 
+  # Jaeger
+#  jaeger-all-in-one:
+#    image: jaegertracing/all-in-one:1.69.0
+#    restart: always
+#    ports:
+#      - "16686:16686"
+#      - "14268"
+#      - "14250"
+#    networks:
+#      - payment-network
+
+  # Zipkin
   zipkin:
-    image: openzipkin/zipkin:3
-    ports:
-      - "9411:9411"
+    image: openzipkin/zipkin:latest
+    restart: always
     environment:
       - STORAGE_TYPE=mem
+    ports:
+      - "9411:9411"
     networks:
       - payment-network
 
 volumes:
   db_data:
-  grafana:
+  grafana-data:
   es_data:
+  alloy-data:
   payment_logs:
 
 networks:
