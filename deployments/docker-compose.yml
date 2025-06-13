@@ -40,12 +40,14 @@ services:
 
   db:
     image: postgres:16
+    container_name: postgres
     environment:
       - POSTGRES_DB=grafana
       - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
+      - POSTGRES_PASSWORD=password
     ports:
       - "5432:5432"
+    restart: unless-stopped
     volumes:
       - ./db_data:/var/lib/postgresql/data
     networks:
@@ -66,66 +68,28 @@ services:
     networks:
       - payment-network
 
-  prometheus:
-    image: prom/prometheus:v2.45.0
-    restart: always
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yaml"
-      - "--enable-feature=otlp-write-receiver"
-      - "--enable-feature=exemplar-storage"
-      - "--web.enable-remote-write-receiver"
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml
-    networks:
-      - payment-network
-
-  loki:
-    image: grafana/loki:3.5
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - ./loki/local-config.yaml:/etc/loki/local-config.yaml
-    ports:
-      - "3100:3100"
-    networks:
-      - payment-network
-
-  tempo:
-    image: grafana/tempo:2.7.2
-    command: -config.file=/etc/tempo/tempo.yaml
-    volumes:
-      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml
-    ports:
-      - "3110:3110"     # Tempo
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-#      - "9411:9411"     # Zipkin
-    networks:
-      - payment-network
-
+  # Observability for app
   grafana:
-    image: grafana/grafana:12.0.1
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin1
-#      - GF_DATABASE_USER=user
-#      - GF_DATABASE_PASSWORD=pass
-    volumes:
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
-#      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-#      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ./grafana-data:/var/lib/grafana
+    image: docker.io/grafana/grafana-oss:10.4.2
+    container_name: grafana
     depends_on:
       - loki
-      - tempo
       - prometheus
+      - tempo
+    ports:
+      - "3000:3000"
+    hostname: ${HOST_NAME:-localhost}
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_DATABASE_USER=user
+      - GF_DATABASE_PASSWORD=password
+      - GF_SECURITY_ADMIN_USER=user
+      - GF_SECURITY_ADMIN_PASSWORD=password
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - grafana-data:/var/lib/grafana
     restart: unless-stopped
     networks:
       - payment-network
@@ -163,25 +127,49 @@ services:
     networks:
       - payment-network
 
-  # Jaeger
-#  jaeger-all-in-one:
-#    image: jaegertracing/all-in-one:1.69.0
-#    restart: always
-#    ports:
-#      - "16686:16686"
-#      - "14268"
-#      - "14250"
-#    networks:
-#      - payment-network
-
-  # Zipkin
-  zipkin:
-    image: openzipkin/zipkin:latest
-    restart: always
-    environment:
-      - STORAGE_TYPE=mem
+  loki:
+    image: docker.io/grafana/loki:2.9.7
+    container_name: loki
+    command: -config.file=/etc/config/loki.yml
     ports:
-      - "9411:9411"
+      - "3100:3100"
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - ./loki/loki.yml:/etc/config/loki.yml
+    restart: unless-stopped
+    networks:
+      - payment-network
+
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.51.2
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/config/prometheus.yml"
+      - "--enable-feature=otlp-write-receiver"
+      - "--enable-feature=exemplar-storage"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "9090:9090"
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/config/prometheus.yml
+    restart: unless-stopped
+    networks:
+      - payment-network
+
+  tempo:
+    image: docker.io/grafana/tempo:2.4.1
+    container_name: tempo
+    command: -config.file /etc/tempo-config.yml
+    ports:
+      - "3110"     # Tempo
+      - "4317"     # OTLP gRPC
+      - "4318"     # OTLP HTTP
+      - "9411:9411"     # zipkin
+    hostname: ${HOST_NAME:-localhost}
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo-config.yml
+    restart: unless-stopped
     networks:
       - payment-network
 

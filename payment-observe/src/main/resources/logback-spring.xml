@@ -1,83 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration scan="true" scanPeriod="30 seconds">
+<configuration>
+    <jmxConfigurator/>
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+    <springProperty scope="context" name="appName" source="spring.application.name"/>
 
-    <property name="LOKI_URL" value="http://localhost:3100/loki/api/v1/push" />
-    <property name="APP_NAME" value="payment-service" />
-    <property name="ENV" value="dev" />
-    <property name="DEPLOYMENT" value="docker-compose" />
-
-    <!-- Use logstash encoder for JSON formatting -->
-    <include resource="net/logstash/logback/logback-base.xml"/>
-
-    <!-- File appender for Filebeat -->
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>/Users/samreachyan/app_logs/core-service.log</file>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <fieldNames>
-                <timestamp>timestamp</timestamp>
-                <message>message</message>
-                <logLevel>level</logLevel>
-                <logger>logger_name</logger>
-                <thread>thread_name</thread>
-            </fieldNames>
-            <customFields>{"app":"${APP_NAME}","env":"${ENV}","deployment":"${DEPLOYMENT}","traceId":"%X{traceId}","spanId":"%X{spanId}"}</customFields>
-        </encoder>
-    </appender>
-
-    <!-- Loki config -->
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
-            <url>${LOKI_URL}</url>
+            <url>${LOKI_URL:-http://localhost:3100/loki/api/v1/push}</url>
         </http>
         <format>
             <label>
-                app="${APP_NAME}", env="${ENV}", deployment="${DEPLOYMENT}", level="%level"
+                <pattern>application=${appName},host=${HOSTNAME},level=%level</pattern>
             </label>
-            <messagePattern>
-                {
-                "timestamp": "%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}",
-                "level": "%level",
-                "thread": "%thread",
-                "logger": "%logger",
-                "traceId": "%X{traceId}",
-                "spanId": "%X{spanId}",
-                "message": "%message",
-                "exception": "%exception{full}"
-                }
-            </messagePattern>
+            <message>
+                <pattern>${FILE_LOG_PATTERN}</pattern>
+            </message>
+            <sortByTime>true</sortByTime>
         </format>
     </appender>
 
-    <!-- Console appender (optional, for local dev) -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
-    </appender>
-
-    <!-- Set logging level and appender by package -->
-    <logger name="com.sakcode.paymentobserve.controller" level="INFO" additivity="false">
-        <appender-ref ref="LOKI"/>
-<!--        <appender-ref ref="LOGSTASH" />-->
-        <appender-ref ref="FILE"/>
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-
-    <logger name="com.sakcode.paymentobserve.service" level="INFO" additivity="false">
-        <appender-ref ref="LOKI"/>
-<!--        <appender-ref ref="LOGSTASH" />-->
-        <appender-ref ref="FILE"/>
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-
-    <logger name="com.sakcode.paymentobserve.repository" level="WARN" additivity="false">
-        <appender-ref ref="LOKI"/>
-        <appender-ref ref="FILE"/>
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-
     <root level="INFO">
         <appender-ref ref="LOKI"/>
-        <appender-ref ref="FILE"/>
-        <appender-ref ref="CONSOLE"/>
     </root>
-
 </configuration>

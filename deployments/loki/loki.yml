@@ -4,15 +4,11 @@ server:
   http_listen_port: 3100
 
 common:
-  path_prefix: /tmp/loki
-#  instance_addr: 127.0.0.1d
-#  path_prefix: /loki
+  path_prefix: /loki
   storage:
     filesystem:
-      chunks_directory: /tmp/loki/chunks
-      rules_directory: /tmp/loki/rules
-#      chunks_directory: /loki/chunks
-#      rules_directory: /loki/rules
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
   replication_factor: 1
   ring:
     kvstore:
@@ -21,10 +17,9 @@ common:
 schema_config:
   configs:
     - from: 2020-10-24
-      store: tsdb
-#      store: boltdb-shipper
+      store: boltdb-shipper
       object_store: filesystem
-      schema: v13
+      schema: v11
       index:
         prefix: index_
         period: 24h
