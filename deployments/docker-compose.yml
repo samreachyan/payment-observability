@@ -22,22 +22,6 @@ services:
 #    volumes:
 #      - ./payment_logs:/Users/samreachyan/app_log
 
-#  api-gateway:
-#    build:
-#      context: ./api-gateway
-#      dockerfile: Dockerfile
-#    ports:
-#      - "8081:8081"
-#    environment:
-#      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
-#      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
-#      - PAYMENT_SERVICE_URL=http://payment-service:8080
-#    depends_on:
-#      - payment-service
-#      - zipkin
-#    networks:
-#      - payment-network
-
   db:
     image: postgres:16
     container_name: postgres
@@ -50,21 +34,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./db_data:/var/lib/postgresql/data
-    networks:
-      - payment-network
-
-  chroma:
-    image: ghcr.io/chroma-core/chroma:0.4.24
-    container_name: chroma
-    depends_on:
-      - alloy
-    ports:
-      - 8000:8000
-    environment:
-      - CHROMA_OTEL_COLLECTION_ENDPOINT=http://grafana-agent:4317
-      - CHROMA_OTEL_SERVICE_NAME=chroma
-      - CHROMA_OTEL_GRANULARITY=all
-      - ANONYMIZED_TELEMETRY=False
     networks:
       - payment-network
 
@@ -89,7 +58,7 @@ services:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - grafana-data:/var/lib/grafana
+      - ./grafana-data:/var/lib/grafana
     restart: unless-stopped
     networks:
       - payment-network
@@ -172,6 +141,20 @@ services:
     restart: unless-stopped
     networks:
       - payment-network
+
+  ## Grafana OnCall OSS
+#  oncall:
+#    image: grafana/oncall:v1.15.6
+#    container_name: grafana-oncall
+#    environment:
+#      - SECRET_KEY=super-secret-key
+#      - DJANGO_SUPERUSER_USERNAME=admin
+#      - DJANGO_SUPERUSER_PASSWORD=admin
+#      - DJANGO_SUPERUSER_EMAIL=admin@example.com
+#    ports:
+#      - "8080:8080"
+#    volumes:
+#      - ./oncall:/data
 
 volumes:
   db_data:

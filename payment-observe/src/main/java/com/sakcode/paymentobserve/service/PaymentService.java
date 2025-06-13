@@ -4,16 +4,19 @@ import com.sakcode.paymentobserve.domain.Payment;
 import com.sakcode.paymentobserve.dto.request.PaymentDTO;
 import com.sakcode.paymentobserve.repository.PaymentRepository;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class PaymentService {
     private PaymentRepository paymentRepository;
 
     public Payment createPayment(PaymentDTO paymentDTO) {
+        log.info("Working into create service: " + paymentDTO.toString());
         Payment payment = new Payment();
         payment.setPayer(paymentDTO.getPayer());
         payment.setAmount(paymentDTO.getAmount());
@@ -21,6 +24,7 @@ public class PaymentService {
     }
 
     public Optional<Payment> getPayment(Long id) {
+        log.info("Querying the id={}", id);
         return paymentRepository.findById(id);
     }
 
