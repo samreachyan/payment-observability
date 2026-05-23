@@ -18,14 +18,10 @@ spring:
 
 
 logging:
-#  file:
-#    name: ${LOGGING_PATH:/Users/samreachyan/app_logs/score-service.log}
-#  pattern:
-#    correlation: '[%X{traceId:-}-%X{spanId:-}] : '
+#   file:
+#     name: ${LOGGING_PATH:/Users/samreachyan/app_logs/score-service.log}
   pattern:
     level: "trace_id=%mdc{trace_id} span_id=%mdc{span_id} trace_flags=%mdc{trace_flags} %p"
-    # 💡 Formats logs to: datetime - level - [traceId-spanId] - message text
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} - %-5level - [%mdc{trace_id:-}-%mdc{span_id:-}] - %msg%n"
 
 management:
   endpoints:
