@@ -110,7 +110,6 @@ services:
       - ./grafana/datasources/:/etc/grafana/provisioning/datasources
       - ./grafana/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml     # dashboard.yml only
       - ./grafana/applications:/etc/grafana/dashboards   # contains dashboards json file
-#      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
       - loki
       - prometheus
