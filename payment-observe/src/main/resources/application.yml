@@ -11,56 +11,32 @@ spring:
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
-
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
-  zipkin:
-    base-url: ${SPRING_ZIPKIN_BASEURL:http://localhost:9411}
+
 
 logging:
 #  file:
 #    name: ${LOGGING_PATH:/Users/samreachyan/app_logs/score-service.log}
+#  pattern:
+#    correlation: '[%X{traceId:-}-%X{spanId:-}] : '
   pattern:
-    correlation: '[%X{traceId:-}-%X{spanId:-}] : '
+    level: "trace_id=%mdc{trace_id} span_id=%mdc{span_id} trace_flags=%mdc{trace_flags} %p"
+    # 💡 Formats logs to: datetime - level - [traceId-spanId] - message text
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} - %-5level - [%mdc{trace_id:-}-%mdc{span_id:-}] - %msg%n"
 
 management:
   endpoints:
     web:
       exposure:
-        include: prometheus, health, metrics
-    metrics:
-      tags:
-        application: ${spring.application.name}
-      distribution:
-        percentiles-histogram:
-          all: true
-          http.server.requests: true
-    opentelemetry:
-      resource-attributes:
-        application: ${spring.application.name}
-        "service.name": ${spring.application.name}
-    prometheus:
-      metrics:
-        export:
-          step: 5s
-    endpoint:
-      health:
-        probes:
-          enabled: true
-        show-details: always
-        show-components: always
-    export:
-      prometheus:
-        enabled: true
-  tracing:
-    sampling:
-      probability: 1.0
-  otlp:
-    metrics:
-      export:
-        url: ${OTLP_METRICS_URL:http://localhost:4318/v1/metrics}
-        step: 10s
-    tracing:
-      endpoint: ${OTLP_TRACES_URL:http://localhost:4318/v1/traces}
+        include: prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: 'true'
