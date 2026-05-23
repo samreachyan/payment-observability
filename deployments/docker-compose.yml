@@ -10,8 +10,7 @@ x-logging: &default-logging
           firstline: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}'
           max_wait_time: 3s
       - regex:
-          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d{3}) - (?P<level>[A-Z]{4,5}) - \[(?P<trace_id>[a-z0-9]*)-(?P<span_id>[a-z0-9]*)\] - (?P<message>.*)$'
-#          expression: '^(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}:\d{2}.\d{3}) (?P<message>(?s:.*))$$'
+          expression: '^(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}:\d{2}.\d{3}) (?P<message>(?s:.*))$$'
 
 x-app-dependencies: &app-dependencies
   loki:
@@ -110,7 +109,6 @@ services:
       - ./grafana/datasources/:/etc/grafana/provisioning/datasources
       - ./grafana/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml     # dashboard.yml only
       - ./grafana/applications:/etc/grafana/dashboards   # contains dashboards json file
-#      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
       - loki
       - prometheus

@@ -32,6 +32,10 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets: ['payment-service-a:8080']
+    relabel_configs:
+      - source_labels: [job]
+        target_label: application
+        replacement: "payment-service-a"
 
   - job_name: 'payment-service-b'
     # Override the global default and scrape targets from this job every 5 seconds.
@@ -39,4 +43,8 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets: ['payment-service-b:8080']
+    relabel_configs:
+      - source_labels: [job]
+        target_label: application
+        replacement: "payment-service-b"
 
