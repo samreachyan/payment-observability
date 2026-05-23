@@ -1,29 +1,28 @@
-services:
-#  payment-service:
-#    build:
-#      context: ../payment-observe
-#      dockerfile: Dockerfile
-#    ports:
-#      - "8080:8080"
-#    environment:
-#      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/paymentdb
-#      - SPRING_DATASOURCE_USERNAME=user
-#      - SPRING_DATASOURCE_PASSWORD=pass
-#      - SPRING_ZIPKIN_BASEURL=http://zipkin:9411
-#      - SPRING_SLEUTH_SAMPLER_PROBABILITY=1.0
-#      - LOKI_URL=http://loki:3100/loki/api/v1/push
-#      - DEPLOYMENT=docker-compose
-#      - LOGGING_PATH=/Users/samreachyan/app_log/core-service.log
-#    depends_on:
-#      - db
-#      - zipkin
-#    networks:
-#      - payment-network
-#    volumes:
-#      - ./payment_logs:/Users/samreachyan/app_log
+x-logging: &default-logging
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/api/prom/push'
+    mode: non-blocking
+    max-buffer-size: 4m
+    loki-retries: "3"
+    loki-pipeline-stages: |
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d{3}) - (?P<level>[A-Z]{4,5}) - \[(?P<trace_id>[a-z0-9]*)-(?P<span_id>[a-z0-9]*)\] - (?P<message>.*)$'
+#          expression: '^(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}:\d{2}.\d{3}) (?P<message>(?s:.*))$$'
 
+x-app-dependencies: &app-dependencies
+  loki:
+    condition: service_healthy
   db:
-    image: postgres:16
+    condition: service_healthy
+
+services:
+  # Database
+  db:
+    image: postgres:15-alpine
     container_name: postgres
     environment:
       - POSTGRES_DB=grafana
@@ -32,135 +31,140 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U grafana" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
     volumes:
       - ./db_data:/var/lib/postgresql/data
     networks:
       - payment-network
 
-  # Observability for app
-  grafana:
-    image: docker.io/grafana/grafana-oss:10.4.2
-    container_name: grafana
+  # Infrastructure
+  loki:
+    image: grafana/loki:3.7
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - payment-network
+    healthcheck:
+      test: [ "CMD", "/usr/bin/loki", "-health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Prometheus Obs
+  prometheus:
+    image: prom/prometheus:v3.11.3
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/workspace
+    command:
+      - --config.file=/workspace/prometheus.yml
+      - --enable-feature=exemplar-storage
     depends_on:
       - loki
-      - prometheus
-      - tempo
+    logging: *default-logging
+    networks:
+      - payment-network
+
+  # Tempo
+  tempo:
+    image: grafana/tempo:2.9.2
+    command: [ "-config.file=/etc/tempo.yml", "--target=all", "--storage.trace.backend=local", "--storage.trace.local.path=/var/tempo", "--auth.enabled=false" ]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3200:3200" # Expose Tempo's HTTP API on port 3200
+      - "9095:9095" # Expose Tempo's gRPC API on port 9095 for Grafana's tracesToProfiles feature
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo.yml
+      - ./tempo_data:/tmp/tempo
+    depends_on:
+      - loki
+    logging: *default-logging
+    networks:
+      - payment-network
+
+  # Observability for app
+  grafana:
+    image: grafana/grafana-oss:12.0.1
     ports:
       - "3000:3000"
-    hostname: ${HOST_NAME:-localhost}
     environment:
+      - GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS=tempo:4317
       - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=db:5432
+      - GF_DATABASE_NAME=grafana
       - GF_DATABASE_USER=user
+#      - GF_DATABASE_SSL_MODE=disable
       - GF_DATABASE_PASSWORD=password
       - GF_SECURITY_ADMIN_USER=user
       - GF_SECURITY_ADMIN_PASSWORD=password
     volumes:
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ./grafana-data:/var/lib/grafana
-    restart: unless-stopped
-    networks:
-      - payment-network
-
-  alloy:
-    image: docker.io/grafana/alloy:v1.0.0
-    container_name: alloy
-    command:
-      - "run"
-      - "--server.http.listen-addr=0.0.0.0:12345"
-      - "--storage.path=/data-alloy"
-      - "--disable-reporting"
-      - "/etc/alloy/config.alloy"
+      - ./grafana/datasources/:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml     # dashboard.yml only
+      - ./grafana/applications:/etc/grafana/dashboards   # contains dashboards json file
+#      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
       - loki
       - prometheus
       - tempo
-    hostname: ${HOST_NAME:-localhost}
+    logging: *default-logging
+    networks:
+      - payment-network
+
+  # Applications
+  payment-service-a:
+    build:
+      context: ../payment-observe
+      dockerfile: Dockerfile
     environment:
-      - ENVIRONMENT=dev
-      - LOKI_URL=http://loki:3100/loki/api/v1/push
-      - PROMETHEUS_URL=http://prometheus:9090/api/v1/write
-      - TEMPO_URL=http://tempo:4317
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/grafana
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=password
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317 # send traces to Tempo
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc # use gRPC for OTLP
+      - OTEL_SERVICE_NAME=payment-service-a # service name for Span
+      - OTEL_METRICS_EXPORTER=none # disable metrics exporter
+      - OTEL_LOGS_EXPORTER=none # disable logs exporter
+      - MANAGEMENT_METRICS_TAGS_APPLICATION=payment-service-a # override default value of management.metrics.tags.application in app/src/main/resources/application.properties
     ports:
-      - "12345:12345"
-      - "4317:4317"
-      - "4318:4318"
-    volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./alloy-data:/data-alloy
-    restart: unless-stopped
+      - "8080:8080"
+    logging: *default-logging
+    depends_on: *app-dependencies
     networks:
       - payment-network
 
-  loki:
-    image: docker.io/grafana/loki:2.9.7
-    container_name: loki
-    command: -config.file=/etc/config/loki.yml
+  payment-service-b:
+    build:
+      context: ../payment-observe
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/grafana
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=password
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317 # send traces to Tempo
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc # use gRPC for OTLP
+      - OTEL_SERVICE_NAME=payment-service-b # service name for Span
+      - OTEL_METRICS_EXPORTER=none # disable metrics exporter
+      - OTEL_LOGS_EXPORTER=none # disable logs exporter
+      - MANAGEMENT_METRICS_TAGS_APPLICATION=payment-service-b # override default value of management.metrics.tags.application in app/src/main/resources/application.properties
     ports:
-      - "3100:3100"
-    hostname: ${HOST_NAME:-localhost}
-    volumes:
-      - ./loki/loki.yml:/etc/config/loki.yml
-    restart: unless-stopped
+      - "8081:8080"
+    logging: *default-logging
+    depends_on: *app-dependencies
     networks:
       - payment-network
-
-  prometheus:
-    image: quay.io/prometheus/prometheus:v2.51.2
-    container_name: prometheus
-    command:
-      - "--config.file=/etc/config/prometheus.yml"
-      - "--enable-feature=otlp-write-receiver"
-      - "--enable-feature=exemplar-storage"
-      - "--web.enable-remote-write-receiver"
-    ports:
-      - "9090:9090"
-    hostname: ${HOST_NAME:-localhost}
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/config/prometheus.yml
-    restart: unless-stopped
-    networks:
-      - payment-network
-
-  tempo:
-    image: docker.io/grafana/tempo:2.4.1
-    container_name: tempo
-    command: -config.file /etc/tempo-config.yml
-    ports:
-      - "3110"     # Tempo
-      - "4317"     # OTLP gRPC
-      - "4318"     # OTLP HTTP
-      - "9411:9411"     # zipkin
-    hostname: ${HOST_NAME:-localhost}
-    volumes:
-      - ./tempo/tempo.yml:/etc/tempo-config.yml
-    restart: unless-stopped
-    networks:
-      - payment-network
-
-  ## Grafana OnCall OSS
-#  oncall:
-#    image: grafana/oncall:v1.15.6
-#    container_name: grafana-oncall
-#    environment:
-#      - SECRET_KEY=super-secret-key
-#      - DJANGO_SUPERUSER_USERNAME=admin
-#      - DJANGO_SUPERUSER_PASSWORD=admin
-#      - DJANGO_SUPERUSER_EMAIL=admin@example.com
-#    ports:
-#      - "8080:8080"
-#    volumes:
-#      - ./oncall:/data
 
 volumes:
   db_data:
-  grafana-data:
-  es_data:
-  alloy-data:
+  tempo_data:
   payment_logs:
 
 networks:
